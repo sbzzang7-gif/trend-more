@@ -291,6 +291,28 @@
     font-weight: 700;
     color: var(--text-primary);
   }
+  .opinion-tag {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .ref-list { display: flex; flex-direction: column; }
+  .ref-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ref-item:last-child { border-bottom: none; }
+  .ref-icon { font-size: 20px; flex-shrink: 0; }
+  .ref-info { flex: 1; min-width: 0; }
+  .ref-title { font-weight: 600; color: var(--text-primary); font-size: 13px; }
+  .ref-title a:hover { text-decoration: underline !important; }
+  .ref-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .ref-date { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
   .picks-table .company {
     color: var(--text-secondary);
     font-size: 11px;
@@ -529,6 +551,19 @@
     text-align: left;
   }
   .add-member-btn:hover { color: var(--accent-blue); background: var(--bg-hover); }
+  .btn-delete-member {
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: all 0.15s;
+  }
+  .member-item:hover .btn-delete-member { opacity: 1; }
+  .btn-delete-member:hover { color: var(--accent-red); background: var(--bg-card); }
 
   /* ===== CHART PLACEHOLDER ===== */
   .mini-chart {
@@ -586,41 +621,19 @@
 </head>
 <body>
 
+<!-- 로딩 오버레이 -->
+<div id="loading-overlay" style="position:fixed;inset:0;background:#0d1117;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px;">
+  <div style="width:40px;height:40px;border:3px solid #30363d;border-top-color:#58a6ff;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  <div style="color:#8b949e;font-size:14px;">Firebase에서 데이터를 불러오는 중...</div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
 <div class="app">
   <!-- ===== SIDEBAR ===== -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="logo">T</div>
       <h1>팀 투자 대시보드</h1>
-    </div>
-
-    <!-- Market Overview -->
-    <div class="sidebar-section">
-      <div class="sidebar-section-title">시장 개요</div>
-      <div class="market-mini">
-        <div class="market-mini-card">
-          <div class="label">KOSPI</div>
-          <div class="value" id="kospi-val">2,847</div>
-          <div class="change up" id="kospi-chg">+1.24%</div>
-        </div>
-        <div class="market-mini-card">
-          <div class="label">KOSDAQ</div>
-          <div class="value" id="kosdaq-val">923</div>
-          <div class="change down" id="kosdaq-chg">-0.31%</div>
-        </div>
-      </div>
-      <div class="market-mini" style="margin-top:8px;">
-        <div class="market-mini-card">
-          <div class="label">USD/KRW</div>
-          <div class="value" style="font-size:14px;" id="usdkrw-val">1,372</div>
-          <div class="change down" id="usdkrw-chg">-0.15%</div>
-        </div>
-        <div class="market-mini-card">
-          <div class="label">국채10Y</div>
-          <div class="value" style="font-size:14px;" id="bond-val">3.42%</div>
-          <div class="change up" id="bond-chg">+2bp</div>
-        </div>
-      </div>
     </div>
 
     <!-- Team Members -->
@@ -713,34 +726,13 @@
       <button class="modal-close" onclick="closeAllModals()">×</button>
     </div>
     <div class="modal-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label>종목명</label>
-          <input type="text" id="input-pick-name" placeholder="예: 삼성전자">
-        </div>
-        <div class="form-group">
-          <label>종목코드</label>
-          <input type="text" id="input-pick-code" placeholder="예: 005930">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>의견</label>
-          <select id="input-pick-opinion">
-            <option value="buy">매수</option>
-            <option value="sell">매도</option>
-            <option value="hold">보유</option>
-            <option value="watch">관심</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>목표가</label>
-          <input type="text" id="input-pick-target" placeholder="예: 85,000">
-        </div>
+      <div class="form-group">
+        <label>종목명</label>
+        <input type="text" id="input-pick-name" placeholder="예: 삼성전자">
       </div>
       <div class="form-group">
-        <label>근거 / 메모</label>
-        <textarea id="input-pick-reason" rows="3" placeholder="매수 근거나 주요 포인트를 작성하세요"></textarea>
+        <label>선정 이유</label>
+        <textarea id="input-pick-reason" rows="4" placeholder="이 종목을 Top Pick으로 선정한 이유를 작성하세요"></textarea>
       </div>
     </div>
     <div class="modal-footer">
@@ -758,25 +750,23 @@
       <button class="modal-close" onclick="closeAllModals()">×</button>
     </div>
     <div class="modal-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label>종목명</label>
-          <input type="text" id="input-holding-name" placeholder="예: SK하이닉스">
-        </div>
-        <div class="form-group">
-          <label>섹터</label>
-          <input type="text" id="input-holding-sector" placeholder="예: 반도체">
-        </div>
+      <div class="form-group">
+        <label>종목명</label>
+        <input type="text" id="input-holding-name" placeholder="예: SK하이닉스">
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>비중 (%)</label>
-          <input type="number" id="input-holding-weight" placeholder="예: 25" min="0" max="100">
-        </div>
-        <div class="form-group">
-          <label>수익률 (%)</label>
-          <input type="number" id="input-holding-return" placeholder="예: 12.5" step="0.1">
-        </div>
+      <div class="form-group">
+        <label>현황</label>
+        <select id="input-holding-status">
+          <option value="신규편입">신규편입</option>
+          <option value="비중확대">비중확대</option>
+          <option value="유지">유지</option>
+          <option value="비중축소">비중축소</option>
+          <option value="편출">편출</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>투자 아이디어</label>
+        <textarea id="input-holding-idea" rows="3" placeholder="이 종목에 대한 투자 아이디어를 작성하세요 (선택)"></textarea>
       </div>
     </div>
     <div class="modal-footer">
@@ -786,54 +776,72 @@
   </div>
 </div>
 
-<!-- Add Idea Modal -->
-<div class="modal-overlay" id="modal-add-idea">
+<!-- Add Reference Modal -->
+<div class="modal-overlay" id="modal-add-ref">
   <div class="modal">
     <div class="modal-header">
-      <h3>투자 아이디어 추가</h3>
+      <h3>참고자료 추가</h3>
       <button class="modal-close" onclick="closeAllModals()">×</button>
     </div>
     <div class="modal-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label>종목명</label>
-          <input type="text" id="input-idea-ticker" placeholder="예: NAVER">
-        </div>
-        <div class="form-group">
-          <label>의견</label>
-          <select id="input-idea-opinion">
-            <option value="buy">매수</option>
-            <option value="sell">매도</option>
-            <option value="hold">보유</option>
-            <option value="watch">관심</option>
-          </select>
-        </div>
+      <div class="form-group">
+        <label>유형</label>
+        <select id="input-ref-type" onchange="toggleRefFields()">
+          <option value="link">링크 (URL)</option>
+          <option value="file">파일 (PDF 등)</option>
+        </select>
       </div>
       <div class="form-group">
-        <label>목표가</label>
-        <input type="text" id="input-idea-target" placeholder="예: 250,000">
+        <label>제목</label>
+        <input type="text" id="input-ref-title" placeholder="예: 2Q26 반도체 산업 전망 리포트">
+      </div>
+      <div class="form-group" id="ref-url-group">
+        <label>URL</label>
+        <input type="text" id="input-ref-url" placeholder="https://...">
+      </div>
+      <div class="form-group" id="ref-file-group" style="display:none;">
+        <label>파일명</label>
+        <input type="text" id="input-ref-filename" placeholder="예: report_2026Q2.pdf">
       </div>
       <div class="form-group">
-        <label>투자 아이디어 / 근거</label>
-        <textarea id="input-idea-body" rows="4" placeholder="왜 이 종목에 주목하는지 작성하세요"></textarea>
+        <label>설명 (선택)</label>
+        <input type="text" id="input-ref-desc" placeholder="간단한 설명을 입력하세요">
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeAllModals()">취소</button>
-      <button class="btn btn-primary" onclick="addIdea()">추가</button>
+      <button class="btn btn-primary" onclick="addRef()">추가</button>
     </div>
   </div>
 </div>
 
 
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
 <script>
-// ===== DATA STORE (In-Memory) =====
+// ===== FIREBASE INIT =====
+const firebaseConfig = {
+  apiKey: "AIzaSyBPWj_AIKrbFKgo9iS63nQ_MJ4tlrgTkh4",
+  authDomain: "trendandmore.firebaseapp.com",
+  databaseURL: "https://trendandmore-default-rtdb.firebaseio.com",
+  projectId: "trendandmore",
+  storageBucket: "trendandmore.firebasestorage.app",
+  messagingSenderId: "857818850162",
+  appId: "1:857818850162:web:26b5a9b8ac174aaa26b3eb"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ===== DATA STORE =====
 const COLORS = ['#58a6ff','#bc8cff','#3fb950','#f0883e','#f85149','#39d2c0','#d29922','#da3633','#8957e5','#79c0ff'];
 
 let currentView = null; // 'member' or 'ideas'
 let selectedMemberId = null;
+let appData = null; // Firebase에서 로드됨
 
-let appData = {
+function getSampleData() { return {
   members: [
     {
       id: 'm1',
@@ -848,15 +856,15 @@ let appData = {
         { name: '에코프로비엠', code: '247540', opinion: 'watch', target: '320,000', reason: '양극재 수요 모니터링 중, 밸류에이션 부담' },
       ],
       holdings: [
-        { name: 'SK하이닉스', sector: '반도체', weight: 30, returnPct: 18.5 },
-        { name: '삼성전자', sector: '반도체', weight: 20, returnPct: 5.2 },
-        { name: 'NAVER', sector: '인터넷', weight: 15, returnPct: -3.1 },
-        { name: '현대차', sector: '자동차', weight: 15, returnPct: 12.8 },
-        { name: '셀트리온', sector: '바이오', weight: 10, returnPct: 7.4 },
-        { name: '현금', sector: '-', weight: 10, returnPct: 0 },
+        { name: 'SK하이닉스', status: '비중확대', idea: 'HBM4 양산 본격화. 2Q26 실적 서프라이즈 예상.' },
+        { name: '삼성전자', status: '유지', idea: '' },
+        { name: 'NAVER', status: '비중축소', idea: '광고 매출 성장 둔화 우려' },
+        { name: '현대차', status: '유지', idea: '' },
+        { name: '셀트리온', status: '신규편입', idea: '바이오시밀러 글로벌 확대 기대' },
       ],
-      ideas: [
-        { ticker: 'SK하이닉스', opinion: 'buy', target: '280,000', body: 'HBM4 양산 본격화. TSMC 3nm CoWoS 확대와 맞물려 최대 수혜. 2Q26 실적 서프라이즈 예상.', date: '2026-03-20' },
+      ideas: [],
+      refs: [
+        { type: 'link', title: '2Q26 반도체 산업 전망', url: 'https://example.com/semiconductor-outlook', filename: '', desc: 'HBM/AI 반도체 수요 분석', date: '2026-03-18' },
       ]
     },
     {
@@ -871,15 +879,15 @@ let appData = {
         { name: '맥쿼리인프라', code: '088980', opinion: 'buy', target: '15,000', reason: '금리 하락 시 배당 매력도 부각' },
       ],
       holdings: [
-        { name: 'KT&G', sector: '소비재', weight: 25, returnPct: 8.3 },
-        { name: '맥쿼리인프라', sector: '인프라', weight: 20, returnPct: 6.1 },
-        { name: 'POSCO홀딩스', sector: '철강', weight: 15, returnPct: -2.5 },
-        { name: '삼성화재', sector: '보험', weight: 15, returnPct: 11.2 },
-        { name: '하나금융지주', sector: '금융', weight: 15, returnPct: 9.7 },
-        { name: '현금', sector: '-', weight: 10, returnPct: 0 },
+        { name: 'KT&G', status: '유지', idea: '배당수익률 5% 이상 유지' },
+        { name: '맥쿼리인프라', status: '유지', idea: '' },
+        { name: 'POSCO홀딩스', status: '비중축소', idea: '철강 업황 부진 지속' },
+        { name: '삼성화재', status: '비중확대', idea: '' },
+        { name: '하나금융지주', status: '신규편입', idea: '금리 인하 수혜 기대' },
       ],
-      ideas: [
-        { ticker: 'KT&G', opinion: 'buy', target: '130,000', body: '해외 NGP(전자담배) 매출 비중 확대 중. 배당수익률 5% 이상 유지.', date: '2026-03-18' },
+      ideas: [],
+      refs: [
+        { type: 'file', title: 'KT&G 배당 분석 보고서.pdf', url: '', filename: 'KT&G_배당분석.pdf', desc: '', date: '2026-03-15' },
       ]
     },
     {
@@ -894,18 +902,21 @@ let appData = {
         { name: '삼성바이오로직스', code: '207940', opinion: 'hold', target: '950,000', reason: '4공장 가동으로 매출 안정, 추가 성장 모멘텀 대기' },
       ],
       holdings: [
-        { name: '셀트리온', sector: '바이오', weight: 30, returnPct: 15.3 },
-        { name: '삼성바이오로직스', sector: '바이오', weight: 20, returnPct: 4.8 },
-        { name: '알테오젠', sector: '바이오', weight: 15, returnPct: 32.1 },
-        { name: '유한양행', sector: '제약', weight: 15, returnPct: -1.2 },
-        { name: '현금', sector: '-', weight: 20, returnPct: 0 },
+        { name: '셀트리온', status: '비중확대', idea: '' },
+        { name: '삼성바이오로직스', status: '유지', idea: '' },
+        { name: '알테오젠', status: '신규편입', idea: 'SC 플랫폼 기술 라이선스 아웃 추가 딜 기대' },
+        { name: '유한양행', status: '비중축소', idea: '' },
       ],
-      ideas: [
-        { ticker: '알테오젠', opinion: 'hold', target: '350,000', body: 'SC 플랫폼 기술 라이선스 아웃 추가 딜 기대. 단기 급등에 따른 차익실현 압력 주의.', date: '2026-03-21' },
-      ]
+      ideas: [],
+      refs: []
     }
   ]
-};
+}; }
+
+// ===== FIREBASE SAVE / LOAD =====
+function saveData() {
+  db.ref('dashboard').set(appData);
+}
 
 // ===== RENDER FUNCTIONS =====
 
@@ -921,14 +932,14 @@ function renderSidebar() {
       <div class="member-avatar" style="background:${m.color}">${m.name[0]}</div>
       <div class="member-info">
         <div class="member-name">${m.name}</div>
-        <div class="member-role">${m.role}</div>
       </div>
       <span class="member-badge">${pickCount} picks</span>
+      <button class="btn-delete-member" onclick="event.stopPropagation(); deleteMember('${m.id}')" title="삭제">×</button>
     `;
     list.appendChild(div);
   });
   // update idea count
-  const totalIdeas = appData.members.reduce((s,m) => s + m.ideas.length, 0);
+  const totalIdeas = appData.members.reduce((s,m) => s + m.holdings.filter(h => h.idea).length, 0);
   document.getElementById('idea-count').textContent = totalIdeas;
 }
 
@@ -956,11 +967,15 @@ function renderMemberView() {
   const content = document.getElementById('main-content');
   content.innerHTML = '';
 
-  // --- Section 1: Market Thought + Top Picks (2-column) ---
+  // --- Row 1: 시장생각 / Top Picks / 포트폴리오 (3 equal columns) ---
   const row1 = document.createElement('div');
-  row1.className = 'grid-2 section-gap';
+  row1.className = 'section-gap';
+  row1.style.display = 'grid';
+  row1.style.gridTemplateColumns = '1fr 1fr 1fr';
+  row1.style.gap = '16px';
 
-  // Market Thought Card
+  const statusColors = {'신규편입':'var(--accent-green)','비중확대':'var(--accent-red)','유지':'var(--text-secondary)','비중축소':'var(--accent-blue)','편출':'var(--accent-orange, #f59e0b)'};
+
   row1.innerHTML = `
     <div class="card">
       <div class="card-header">
@@ -982,21 +997,14 @@ function renderMemberView() {
           <thead>
             <tr>
               <th>종목</th>
-              <th>의견</th>
-              <th>목표가</th>
-              <th>근거</th>
+              <th>선정 이유</th>
               <th></th>
             </tr>
           </thead>
           <tbody id="picks-tbody">
             ${m.topPicks.map((p, i) => `
               <tr>
-                <td>
-                  <div class="ticker">${p.name}</div>
-                  <div class="company">${p.code}</div>
-                </td>
-                <td><span class="tag tag-${p.opinion}">${opinionLabel(p.opinion)}</span></td>
-                <td style="font-variant-numeric:tabular-nums;font-weight:600;">₩${p.target}</td>
+                <td><div class="ticker">${p.name}</div></td>
                 <td class="reason">${escapeHtml(p.reason)}</td>
                 <td><button class="btn btn-sm" onclick="removePick(${i})" style="color:var(--accent-red);border:none;background:none;font-size:14px;">×</button></td>
               </tr>
@@ -1006,103 +1014,67 @@ function renderMemberView() {
         ${m.topPicks.length === 0 ? '<div class="empty-state" style="padding:20px"><p>Top Pick을 추가해 주세요</p></div>' : ''}
       </div>
     </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">💼 포트폴리오</span>
+        <button class="btn btn-sm" onclick="openModal('add-holding')">＋ 종목 추가</button>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <table class="picks-table">
+          <thead>
+            <tr>
+              <th>종목명</th>
+              <th>현황</th>
+              <th>아이디어</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${m.holdings.map((h, i) => `
+              <tr>
+                <td><div class="ticker">${h.name}</div></td>
+                <td><span class="opinion-tag" style="color:${statusColors[h.status] || 'var(--text-secondary)'};border-color:${statusColors[h.status] || 'var(--text-secondary)'}">${h.status || '유지'}</span></td>
+                <td class="reason">${h.idea ? escapeHtml(h.idea) : '<span style="color:var(--text-muted);font-size:12px;">-</span>'}</td>
+                <td><button class="btn btn-sm" onclick="removeHolding(${i})" style="color:var(--accent-red);border:none;background:none;font-size:14px;">×</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ${m.holdings.length === 0 ? '<div class="empty-state" style="padding:20px"><p>보유 종목을 추가해 주세요</p></div>' : ''}
+      </div>
+    </div>
   `;
   content.appendChild(row1);
 
-  // --- Section 2: Portfolio ---
-  const portCard = document.createElement('div');
-  portCard.className = 'card section-gap';
-
-  const totalReturn = m.holdings.reduce((s, h) => s + h.weight * h.returnPct / 100, 0);
-  const holdingsNoCache = m.holdings.filter(h => h.sector !== '-');
-
-  portCard.innerHTML = `
+  // --- Section 2: 참고자료 ---
+  const refCard = document.createElement('div');
+  refCard.className = 'card section-gap';
+  const refs = m.refs || [];
+  refCard.innerHTML = `
     <div class="card-header">
-      <span class="card-title">💼 포트폴리오</span>
-      <button class="btn btn-sm" onclick="openModal('add-holding')">＋ 종목 추가</button>
+      <span class="card-title">📎 참고자료</span>
+      <button class="btn btn-sm" onclick="openModal('add-ref')">＋ 추가</button>
     </div>
-    <div class="card-body">
-      <div class="portfolio-summary">
-        <div class="portfolio-stat">
-          <div class="stat-label">총 수익률</div>
-          <div class="stat-value" style="color:${totalReturn >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)'}">
-            ${totalReturn >= 0 ? '+' : ''}${totalReturn.toFixed(1)}%
-          </div>
-        </div>
-        <div class="portfolio-stat">
-          <div class="stat-label">보유 종목 수</div>
-          <div class="stat-value">${holdingsNoCache.length}개</div>
-        </div>
-        <div class="portfolio-stat">
-          <div class="stat-label">현금 비중</div>
-          <div class="stat-value">${(m.holdings.find(h => h.name === '현금')?.weight || 0)}%</div>
-        </div>
-      </div>
-      <div class="donut-container">
-        <svg class="donut-chart" viewBox="0 0 120 120" id="donut-${m.id}"></svg>
-        <div class="donut-legend" id="legend-${m.id}"></div>
-      </div>
-      <div style="margin-top:12px;" id="holdings-list-${m.id}">
-        ${m.holdings.map((h, i) => `
-          <div class="holding-row">
-            <div class="holding-name">
-              <div class="name">${h.name}</div>
-              <div class="sub">${h.sector}</div>
+    <div class="card-body" style="padding:0;">
+      ${refs.length > 0 ? `
+        <div class="ref-list">
+          ${refs.map((r, i) => `
+            <div class="ref-item">
+              <span class="ref-icon">${r.type === 'link' ? '🔗' : '📄'}</span>
+              <div class="ref-info">
+                <div class="ref-title">${r.type === 'link' ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener" style="color:var(--accent-blue);text-decoration:none;">${escapeHtml(r.title)}</a>` : escapeHtml(r.title)}</div>
+                ${r.desc ? `<div class="ref-desc">${escapeHtml(r.desc)}</div>` : ''}
+                <div class="ref-date">${r.date}</div>
+              </div>
+              <button class="btn btn-sm" onclick="removeRef(${i})" style="color:var(--accent-red);border:none;background:none;font-size:14px;">×</button>
             </div>
-            <div class="weight-bar-bg">
-              <div class="weight-bar" style="width:${h.weight}%;background:${COLORS[i % COLORS.length]}"></div>
-            </div>
-            <div class="holding-weight">${h.weight}%</div>
-            <div class="holding-return" style="color:${h.returnPct >= 0 ? 'var(--accent-red)' : 'var(--accent-blue)'}">
-              ${h.returnPct >= 0 ? '+' : ''}${h.returnPct}%
-            </div>
-            <button class="btn btn-sm" onclick="removeHolding(${i})" style="color:var(--accent-red);border:none;background:none;font-size:14px;">×</button>
-          </div>
-        `).join('')}
-      </div>
+          `).join('')}
+        </div>
+      ` : '<div class="empty-state" style="padding:20px"><p>참고자료를 추가해 주세요 (링크, PDF 등)</p></div>'}
     </div>
   `;
-  content.appendChild(portCard);
+  content.appendChild(refCard);
 
-  // Draw donut chart
-  setTimeout(() => drawDonut(m), 10);
-
-  // --- Section 3: Ideas ---
-  const ideaCard = document.createElement('div');
-  ideaCard.className = 'card';
-  ideaCard.innerHTML = `
-    <div class="card-header">
-      <span class="card-title">💡 투자 아이디어</span>
-      <button class="btn btn-sm" onclick="openModal('add-idea')">＋ 추가</button>
-    </div>
-    <div class="card-body">
-      <div class="idea-grid" id="ideas-personal">
-        ${m.ideas.map((idea, i) => renderIdeaCard(idea, m.name, m.color, i)).join('')}
-      </div>
-      ${m.ideas.length === 0 ? '<div class="empty-state"><p>투자 아이디어를 추가해 주세요</p></div>' : ''}
-    </div>
-  `;
-  content.appendChild(ideaCard);
-}
-
-function renderIdeaCard(idea, name, color, idx) {
-  return `
-    <div class="idea-card">
-      <div class="idea-card-header">
-        <span class="idea-ticker">${idea.ticker}</span>
-        <span class="tag tag-${idea.opinion}">${opinionLabel(idea.opinion)}</span>
-      </div>
-      <div class="idea-body">${escapeHtml(idea.body)}</div>
-      <div class="idea-meta">
-        <span style="display:flex;align-items:center;gap:4px;">
-          <span style="width:14px;height:14px;border-radius:50%;background:${color};display:inline-block;"></span>
-          ${name}
-        </span>
-        <span>${idea.date}</span>
-      </div>
-      ${idea.target ? `<div class="idea-meta"><span>목표가</span><span class="idea-target">₩${idea.target}</span></div>` : ''}
-    </div>
-  `;
 }
 
 // ===== IDEA BOARD =====
@@ -1111,53 +1083,50 @@ function showIdeaBoard() {
   selectedMemberId = null;
   renderSidebar();
   document.getElementById('nav-idea-board').classList.add('active');
-  document.getElementById('main-title-text').textContent = '💡 전체 아이디어 보드';
-  document.getElementById('header-actions').innerHTML = `
-    <button class="btn btn-primary" onclick="openModal('add-idea')">＋ 새 아이디어</button>
-  `;
+  document.getElementById('main-title-text').textContent = '💡 전체 투자 아이디어';
+  document.getElementById('header-actions').innerHTML = '';
 
   const content = document.getElementById('main-content');
 
-  // Gather all ideas
+  // Gather all holdings with ideas
   let allIdeas = [];
   appData.members.forEach(m => {
-    m.ideas.forEach(idea => {
-      allIdeas.push({ ...idea, memberName: m.name, memberColor: m.color });
+    m.holdings.forEach(h => {
+      if (h.idea) {
+        allIdeas.push({ name: h.name, status: h.status, idea: h.idea, memberName: m.name, memberColor: m.color });
+      }
     });
   });
-  allIdeas.sort((a,b) => b.date.localeCompare(a.date));
+
+  const statusColors = {'신규편입':'var(--accent-green)','비중확대':'var(--accent-red)','유지':'var(--text-secondary)','비중축소':'var(--accent-blue)','편출':'var(--accent-orange, #f59e0b)'};
 
   content.innerHTML = `
-    <div class="board-filters">
-      <button class="filter-chip active" onclick="filterIdeas(this, 'all')">전체</button>
-      <button class="filter-chip" onclick="filterIdeas(this, 'buy')">매수</button>
-      <button class="filter-chip" onclick="filterIdeas(this, 'sell')">매도</button>
-      <button class="filter-chip" onclick="filterIdeas(this, 'hold')">보유</button>
-      <button class="filter-chip" onclick="filterIdeas(this, 'watch')">관심</button>
+    <div class="card">
+      <div class="card-body" style="padding:0;">
+        <table class="picks-table">
+          <thead>
+            <tr>
+              <th>팀원</th>
+              <th>종목명</th>
+              <th>현황</th>
+              <th>투자 아이디어</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allIdeas.map(item => `
+              <tr>
+                <td><span style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:50%;background:${item.memberColor};display:inline-block;"></span>${item.memberName}</span></td>
+                <td><div class="ticker">${item.name}</div></td>
+                <td><span class="opinion-tag" style="color:${statusColors[item.status] || 'var(--text-secondary)'};border-color:${statusColors[item.status] || 'var(--text-secondary)'}">${item.status}</span></td>
+                <td class="reason">${escapeHtml(item.idea)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ${allIdeas.length === 0 ? '<div class="empty-state" style="padding:30px"><div class="icon">💡</div><p>아직 등록된 아이디어가 없습니다.<br>포트폴리오 종목에 아이디어를 추가해 보세요!</p></div>' : ''}
+      </div>
     </div>
-    <div class="idea-grid" id="board-ideas">
-      ${allIdeas.map(idea => renderIdeaCard(idea, idea.memberName, idea.memberColor, -1)).join('')}
-    </div>
-    ${allIdeas.length === 0 ? '<div class="empty-state"><div class="icon">💡</div><p>아직 등록된 아이디어가 없습니다.<br>팀원 뷰에서 아이디어를 추가해 보세요!</p></div>' : ''}
   `;
-}
-
-function filterIdeas(el, type) {
-  document.querySelectorAll('.board-filters .filter-chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-
-  let allIdeas = [];
-  appData.members.forEach(m => {
-    m.ideas.forEach(idea => {
-      allIdeas.push({ ...idea, memberName: m.name, memberColor: m.color });
-    });
-  });
-  if (type !== 'all') allIdeas = allIdeas.filter(i => i.opinion === type);
-  allIdeas.sort((a,b) => b.date.localeCompare(a.date));
-
-  document.getElementById('board-ideas').innerHTML = allIdeas.map(
-    idea => renderIdeaCard(idea, idea.memberName, idea.memberColor, -1)
-  ).join('') || '<div class="empty-state" style="grid-column:1/-1"><p>해당 필터에 맞는 아이디어가 없습니다</p></div>';
 }
 
 // ===== DONUT CHART =====
@@ -1216,6 +1185,24 @@ function openEditThought() {
 }
 
 // ===== DATA ACTIONS =====
+function deleteMember(id) {
+  const m = getMember(id);
+  if (!m) return;
+  if (!confirm(`"${m.name}" 팀원을 삭제하시겠습니까?`)) return;
+  appData.members = appData.members.filter(m => m.id !== id);
+  if (selectedMemberId === id) {
+    selectedMemberId = appData.members.length > 0 ? appData.members[0].id : null;
+    if (selectedMemberId) renderMemberView();
+    else {
+      document.getElementById('main-title-text').textContent = '팀원을 선택하세요';
+      document.getElementById('main-content').innerHTML = '<div class="empty-state"><div class="icon">👈</div><p>왼쪽 사이드바에서 팀원을 선택하거나<br>새로운 팀원을 추가해 주세요.</p></div>';
+      document.getElementById('header-actions').innerHTML = '';
+    }
+  }
+  saveData();
+  renderSidebar();
+}
+
 function addMember() {
   const name = document.getElementById('input-member-name').value.trim();
   const role = document.getElementById('input-member-role').value.trim();
@@ -1225,11 +1212,12 @@ function addMember() {
     id, name, role: role || '미정',
     color: COLORS[appData.members.length % COLORS.length],
     thought: '', thoughtDate: todayStr(),
-    topPicks: [], holdings: [], ideas: []
+    topPicks: [], holdings: [], ideas: [], refs: []
   });
   closeAllModals();
   document.getElementById('input-member-name').value = '';
   document.getElementById('input-member-role').value = '';
+  saveData();
   renderSidebar();
   selectMember(id);
 }
@@ -1240,6 +1228,7 @@ function saveThought() {
   m.thought = document.getElementById('input-thought').value;
   m.thoughtDate = todayStr();
   closeAllModals();
+  saveData();
   renderMemberView();
 }
 
@@ -1250,13 +1239,11 @@ function addTopPick() {
   if (!name) return;
   m.topPicks.push({
     name,
-    code: document.getElementById('input-pick-code').value.trim(),
-    opinion: document.getElementById('input-pick-opinion').value,
-    target: document.getElementById('input-pick-target').value.trim(),
     reason: document.getElementById('input-pick-reason').value.trim()
   });
   closeAllModals();
-  ['input-pick-name','input-pick-code','input-pick-target','input-pick-reason'].forEach(id => document.getElementById(id).value = '');
+  ['input-pick-name','input-pick-reason'].forEach(id => document.getElementById(id).value = '');
+  saveData();
   renderMemberView();
   renderSidebar();
 }
@@ -1265,6 +1252,7 @@ function removePick(idx) {
   const m = getMember(selectedMemberId);
   if (!m) return;
   m.topPicks.splice(idx, 1);
+  saveData();
   renderMemberView();
   renderSidebar();
 }
@@ -1276,12 +1264,14 @@ function addHolding() {
   if (!name) return;
   m.holdings.push({
     name,
-    sector: document.getElementById('input-holding-sector').value.trim() || '-',
-    weight: parseFloat(document.getElementById('input-holding-weight').value) || 0,
-    returnPct: parseFloat(document.getElementById('input-holding-return').value) || 0
+    status: document.getElementById('input-holding-status').value,
+    idea: document.getElementById('input-holding-idea').value.trim()
   });
   closeAllModals();
-  ['input-holding-name','input-holding-sector','input-holding-weight','input-holding-return'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('input-holding-name').value = '';
+  document.getElementById('input-holding-status').value = '신규편입';
+  document.getElementById('input-holding-idea').value = '';
+  saveData();
   renderMemberView();
 }
 
@@ -1289,34 +1279,47 @@ function removeHolding(idx) {
   const m = getMember(selectedMemberId);
   if (!m) return;
   m.holdings.splice(idx, 1);
+  saveData();
   renderMemberView();
 }
 
-function addIdea() {
-  // If on idea board without a member selected, pick first member
-  let targetMember;
-  if (selectedMemberId) {
-    targetMember = getMember(selectedMemberId);
-  } else if (appData.members.length > 0) {
-    targetMember = appData.members[0];
-  } else return;
+function toggleRefFields() {
+  const type = document.getElementById('input-ref-type').value;
+  document.getElementById('ref-url-group').style.display = type === 'link' ? '' : 'none';
+  document.getElementById('ref-file-group').style.display = type === 'file' ? '' : 'none';
+}
 
-  const ticker = document.getElementById('input-idea-ticker').value.trim();
-  if (!ticker) return;
-  targetMember.ideas.push({
-    ticker,
-    opinion: document.getElementById('input-idea-opinion').value,
-    target: document.getElementById('input-idea-target').value.trim(),
-    body: document.getElementById('input-idea-body').value.trim(),
+function addRef() {
+  const m = getMember(selectedMemberId);
+  if (!m) return;
+  const title = document.getElementById('input-ref-title').value.trim();
+  if (!title) return;
+  const type = document.getElementById('input-ref-type').value;
+  if (!m.refs) m.refs = [];
+  m.refs.push({
+    type,
+    title,
+    url: type === 'link' ? document.getElementById('input-ref-url').value.trim() : '',
+    filename: type === 'file' ? document.getElementById('input-ref-filename').value.trim() : '',
+    desc: document.getElementById('input-ref-desc').value.trim(),
     date: todayStr()
   });
   closeAllModals();
-  ['input-idea-ticker','input-idea-target','input-idea-body'].forEach(id => document.getElementById(id).value = '');
-
-  if (currentView === 'ideas') showIdeaBoard();
-  else renderMemberView();
-  renderSidebar();
+  ['input-ref-title','input-ref-url','input-ref-filename','input-ref-desc'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('input-ref-type').value = 'link';
+  toggleRefFields();
+  saveData();
+  renderMemberView();
 }
+
+function removeRef(idx) {
+  const m = getMember(selectedMemberId);
+  if (!m || !m.refs) return;
+  m.refs.splice(idx, 1);
+  saveData();
+  renderMemberView();
+}
+
 
 // ===== UTILS =====
 function opinionLabel(op) {
@@ -1342,8 +1345,32 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 });
 
 // ===== INIT =====
-renderSidebar();
-selectMember('m1');
+db.ref('dashboard').on('value', (snapshot) => {
+  const data = snapshot.val();
+  if (data) {
+    appData = data;
+    // 배열이 null로 저장되는 Firebase 특성 보정
+    appData.members = appData.members || [];
+    appData.members.forEach(m => {
+      m.topPicks = m.topPicks || [];
+      m.holdings = m.holdings || [];
+      m.ideas = m.ideas || [];
+      m.refs = m.refs || [];
+    });
+  } else {
+    // 최초 실행: 샘플 데이터 저장
+    appData = getSampleData();
+    saveData();
+  }
+  document.getElementById('loading-overlay').style.display = 'none';
+  renderSidebar();
+  if (selectedMemberId && appData.members.find(m => m.id === selectedMemberId)) {
+    if (currentView === 'ideas') showIdeaBoard();
+    else renderMemberView();
+  } else if (appData.members.length > 0) {
+    selectMember(appData.members[0].id);
+  }
+});
 </script>
 </body>
 </html>
