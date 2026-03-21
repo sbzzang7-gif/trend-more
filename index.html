@@ -620,6 +620,25 @@
   }
   .member-item:hover .btn-delete-member { opacity: 1; }
   .btn-delete-member:hover { color: var(--accent-red); background: var(--bg-card); }
+  .member-item-actions { display: flex; align-items: center; gap: 2px; }
+  .btn-move-member {
+    border: none; background: none; color: var(--text-muted);
+    font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 4px;
+    opacity: 0; line-height: 1;
+  }
+  .member-item:hover .btn-move-member { opacity: 1; }
+  .btn-move-member:hover { color: var(--text-primary); background: var(--bg-card); }
+  .badge-new {
+    font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 8px;
+    background: var(--accent-green); color: #0d1117; letter-spacing: 0.5px;
+    animation: pulse-new 2s ease-in-out infinite;
+  }
+  @keyframes pulse-new { 0%,100%{opacity:1} 50%{opacity:0.6} }
+  .nav-new-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent-green); margin-left: 4px;
+    animation: pulse-new 2s ease-in-out infinite;
+  }
 
   /* ===== CHART PLACEHOLDER ===== */
   .mini-chart {
@@ -1068,13 +1087,25 @@ function openWeekModal(type, weekId) {
   openModal(type);
 }
 
+function moveMember(id, dir) {
+  const idx = appData.members.findIndex(m => m.id === id);
+  if (idx < 0) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= appData.members.length) return;
+  const tmp = appData.members[idx];
+  appData.members[idx] = appData.members[newIdx];
+  appData.members[newIdx] = tmp;
+  saveData();
+  renderSidebar();
+}
+
 function addNewWeek() {
   const m = getMember(selectedMemberId);
   if (!m) return;
   if (!m.weeks) m.weeks = [];
   if (m.weeks.length > 0 && !confirm('새 주차를 시작하겠습니까?\n이전 주차는 기록으로 보존됩니다.')) return;
   const weekId = 'w_' + Date.now();
-  m.weeks.unshift({ id: weekId, startDate: todayStr(), thought: '', thoughtDate: todayStr(), topPicks: [], holdings: [], refs: [] });
+  m.weeks.unshift({ id: weekId, startDate: todayStr(), thought: '', thoughtDate: todayStr(), topPicks: [], holdings: [], refs: [], createdAt: Date.now() });
   expandedWeeks.clear();
   expandedWeeks.add(weekId);
   saveData();
@@ -1083,29 +1114,54 @@ function addNewWeek() {
 
 // ===== RENDER FUNCTIONS =====
 
+const NEW_THRESHOLD = 24 * 60 * 60 * 1000; // 24시간(ms)
+function isNew(ts) { return ts && (Date.now() - ts) < NEW_THRESHOLD; }
+
 function renderSidebar() {
   const list = document.getElementById('member-list');
   list.innerHTML = '';
-  appData.members.forEach(m => {
+  const total = appData.members.length;
+  appData.members.forEach((m, idx) => {
     const div = document.createElement('div');
     div.className = 'member-item' + (selectedMemberId === m.id ? ' active' : '');
     div.onclick = () => selectMember(m.id);
     const latestWeek = (m.weeks || [])[0];
     const pickCount = latestWeek ? (latestWeek.topPicks || []).length : 0;
+    const memberHasNew = (m.weeks || []).some(w => isNew(w.createdAt));
     div.innerHTML = `
       <div class="member-avatar" style="background:${m.color}">${m.name[0]}</div>
       <div class="member-info">
         <div class="member-name">${m.name}</div>
       </div>
-      <span class="member-badge">${pickCount} picks</span>
-      <button class="btn-delete-member" onclick="event.stopPropagation(); deleteMember('${m.id}')" title="삭제">×</button>
+      ${memberHasNew ? '<span class="badge-new">NEW</span>' : `<span class="member-badge">${pickCount} picks</span>`}
+      <div class="member-item-actions">
+        <button class="btn-move-member" onclick="event.stopPropagation(); moveMember('${m.id}',-1)" title="위로" ${idx === 0 ? 'disabled style="visibility:hidden"' : ''}>▲</button>
+        <button class="btn-move-member" onclick="event.stopPropagation(); moveMember('${m.id}',1)" title="아래로" ${idx === total-1 ? 'disabled style="visibility:hidden"' : ''}>▼</button>
+        <button class="btn-delete-member" onclick="event.stopPropagation(); deleteMember('${m.id}')" title="삭제">×</button>
+      </div>
     `;
     list.appendChild(div);
   });
+
   const totalIdeas = appData.members.reduce((s, m) =>
     s + (m.weeks || []).reduce((ws, w) => ws + (w.holdings || []).filter(h => h.idea).length, 0), 0);
   document.getElementById('idea-count').textContent = totalIdeas;
-  document.getElementById('library-count').textContent = (appData.library || []).length;
+
+  const libItems = appData.library || [];
+  const libCount = libItems.length;
+  const libHasNew = libItems.some(r => isNew(r.createdAt));
+  document.getElementById('library-count').textContent = libCount;
+
+  // NEW 점 표시 (nav 아이템 옆)
+  ['nav-idea-board','nav-library'].forEach(id => {
+    const el = document.getElementById(id);
+    el.querySelectorAll('.nav-new-dot').forEach(d => d.remove());
+  });
+  if (libHasNew) {
+    const dot = document.createElement('span');
+    dot.className = 'nav-new-dot';
+    document.getElementById('nav-library').appendChild(dot);
+  }
 }
 
 function selectMember(id) {
@@ -1162,6 +1218,7 @@ function renderMemberView() {
       <div class="week-header" onclick="toggleWeek('${week.id}')">
         <div class="week-label">
           ${isLatest ? '<span class="badge-current">현재</span>' : ''}
+          ${isNew(week.createdAt) ? '<span class="badge-new">NEW</span>' : ''}
           <span class="week-title">${formatWeekLabel(week.startDate)}</span>
           <span class="week-date-sub">${week.startDate}</span>
         </div>
@@ -1370,6 +1427,7 @@ function renderLibrary() {
               <div class="lib-card-meta">
                 <div class="lib-meta-left">
                   <span class="lib-type-badge ${meta.badge}">${meta.label}</span>
+                  ${isNew(item.createdAt) ? '<span class="badge-new">NEW</span>' : ''}
                   <span class="lib-card-author">by ${escapeHtml(item.author)}</span>
                 </div>
                 <span class="lib-card-date">${item.date}</span>
@@ -1413,7 +1471,8 @@ function addLibraryItem() {
     filename: type !== 'link' ? document.getElementById('input-lib-filename').value.trim() : '',
     desc: document.getElementById('input-lib-desc').value.trim(),
     author: document.getElementById('input-lib-author').value,
-    date: todayStr()
+    date: todayStr(),
+    createdAt: Date.now()
   });
   closeAllModals();
   ['input-lib-title','input-lib-url','input-lib-filename','input-lib-desc'].forEach(id => document.getElementById(id).value = '');
