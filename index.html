@@ -780,8 +780,10 @@
     .card-body { padding: 12px; }
     .card-header { padding: 12px 14px; }
 
-    /* Picks table: hide reason column on very small screens */
-    .picks-table .reason { display: none; }
+    /* Picks table: 모바일에서 가로 스크롤 */
+    .picks-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .picks-table { min-width: 480px; }
+    .picks-table th, .picks-table td { font-size: 12px; padding: 8px 8px; }
 
     /* Header actions: shrink buttons */
     .header-actions { gap: 6px; }
@@ -1427,6 +1429,7 @@ function renderMemberView() {
               ${isLatest ? `<button class="btn btn-sm" onclick="openWeekModal('add-pick','${week.id}')">＋ 추가</button>` : ''}
             </div>
             <div class="card-body" style="padding:0;">
+              <div class="picks-table-wrap">
               <table class="picks-table">
                 <thead><tr><th>종목</th><th>선정 이유</th>${isLatest ? '<th></th>' : ''}</tr></thead>
                 <tbody>
@@ -1438,6 +1441,7 @@ function renderMemberView() {
                     </tr>`).join('')}
                 </tbody>
               </table>
+              </div>
               ${picks.length === 0 ? '<div class="empty-state" style="padding:16px"><p>Top Pick을 추가해 주세요</p></div>' : ''}
             </div>
           </div>
@@ -1447,6 +1451,7 @@ function renderMemberView() {
               ${isLatest ? `<button class="btn btn-sm" onclick="openWeekModal('add-holding','${week.id}')">＋ 종목 추가</button>` : ''}
             </div>
             <div class="card-body" style="padding:0;">
+              <div class="picks-table-wrap">
               <table class="picks-table">
                 <thead><tr><th>종목명</th><th>현황</th><th>아이디어</th>${isLatest ? '<th></th>' : ''}</tr></thead>
                 <tbody>
@@ -1459,6 +1464,7 @@ function renderMemberView() {
                     </tr>`).join('')}
                 </tbody>
               </table>
+              </div>
               ${holdings.length === 0 ? '<div class="empty-state" style="padding:16px"><p>보유 종목을 추가해 주세요</p></div>' : ''}
             </div>
           </div>
@@ -1560,7 +1566,7 @@ function renderIdeaBoard() {
 
     const tableHtml = ideas.length === 0
       ? `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">이번 주차에는 등록된 아이디어가 없습니다.</div>`
-      : `<div class="card"><div class="card-body" style="padding:0;">
+      : `<div class="card"><div class="card-body" style="padding:0;"><div class="picks-table-wrap">
           <table class="picks-table">
             <thead>
               <tr><th>팀원</th><th>종목명</th><th>구분</th><th>아이디어 / 선정 이유</th></tr>
@@ -1583,7 +1589,7 @@ function renderIdeaBoard() {
               }).join('')}
             </tbody>
           </table>
-        </div></div>`;
+        </div></div></div>`;
 
     return `
       <div class="week-section">
@@ -1846,16 +1852,34 @@ function openLibFile(weekId, itemId) {
   if (!lw) return;
   const item = (lw.items || []).find(it => it.id === itemId);
   if (!item || !item.fileData) return;
-  // PDF는 새 탭에서 바로 열기, 나머지는 다운로드
-  if (item.type === 'pdf') {
-    window.open(item.fileData, '_blank');
-  } else {
-    const a = document.createElement('a');
-    a.href = item.fileData;
-    a.download = item.filename || 'download';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+
+  // data URL → Blob URL 변환 (브라우저가 data: URL 직접 열기를 차단하는 문제 해결)
+  try {
+    const parts = item.fileData.split(',');
+    const mime = parts[0].match(/:(.*?);/)[1];
+    const binary = atob(parts[1]);
+    const buf = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+    const blob = new Blob([buf], { type: mime });
+    const blobUrl = URL.createObjectURL(blob);
+
+    if (item.type === 'pdf') {
+      // PDF: 새 탭에서 바로 열기
+      window.open(blobUrl, '_blank');
+    } else {
+      // 기타 파일: 다운로드
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = item.filename || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+    // 1분 후 메모리 해제
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch(e) {
+    console.error('파일 열기 실패:', e);
+    alert('파일을 열지 못했습니다. 다시 시도해 주세요.');
   }
 }
 
