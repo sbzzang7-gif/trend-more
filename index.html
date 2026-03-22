@@ -692,6 +692,118 @@
     align-items: center;
     gap: 4px;
   }
+
+  /* ===== HAMBURGER BUTTON ===== */
+  .hamburger-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px; height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .hamburger-btn:hover { background: var(--bg-hover); }
+
+  /* ===== SIDEBAR BACKDROP (mobile) ===== */
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 50;
+    backdrop-filter: blur(2px);
+  }
+  .sidebar-backdrop.open { display: block; }
+
+  /* ===== MOBILE RESPONSIVE ===== */
+  @media (max-width: 768px) {
+    body { overflow: auto; }
+    .app { position: relative; }
+
+    /* Sidebar: fixed overlay sliding from left */
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0;
+      height: 100%;
+      z-index: 60;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      box-shadow: 4px 0 20px rgba(0,0,0,0.4);
+    }
+    .sidebar.sidebar-open { transform: translateX(0); }
+
+    /* Main takes full width */
+    .main { width: 100%; min-height: 100vh; }
+
+    /* Show hamburger */
+    .hamburger-btn { display: flex; }
+
+    /* Header tweaks */
+    .main-header { padding: 0 14px; gap: 10px; }
+    .main-header h2 { font-size: 14px; }
+    .main-content { padding: 14px; }
+
+    /* Collapse all multi-column grids to 1 column */
+    .grid-2,
+    .grid-3,
+    .week-grid-3,
+    .lib-grid {
+      grid-template-columns: 1fr;
+    }
+
+    /* Idea / library grids */
+    .idea-grid {
+      grid-template-columns: 1fr;
+    }
+
+    /* Ref items: smaller padding */
+    .ref-item { padding: 10px 12px; gap: 10px; }
+
+    /* Week header: tighten up */
+    .week-header { padding: 12px 14px; }
+    .week-title { font-size: 13px; }
+    .week-body { padding: 12px; }
+
+    /* Card body padding */
+    .card-body { padding: 12px; }
+    .card-header { padding: 12px 14px; }
+
+    /* Picks table: hide reason column on very small screens */
+    .picks-table .reason { display: none; }
+
+    /* Header actions: shrink buttons */
+    .header-actions { gap: 6px; }
+    .btn { padding: 5px 10px; font-size: 11px; }
+    .btn-sm { padding: 3px 8px; font-size: 10px; }
+
+    /* Modal: full screen feel on mobile */
+    .modal {
+      width: 96%;
+      max-height: 90vh;
+      border-radius: 10px;
+    }
+    .modal-body { padding: 16px; }
+    .modal-footer { padding: 12px 16px; }
+
+    /* Form row stacks vertically */
+    .form-row { flex-direction: column; gap: 0; }
+
+    /* Library filter bar: scroll horizontally */
+    .lib-filter-bar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+    .lib-filter-bar::-webkit-scrollbar { display: none; }
+    .filter-chip { white-space: nowrap; }
+    .board-filters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+    .board-filters::-webkit-scrollbar { display: none; }
+
+    /* Member item: show action buttons always on mobile */
+    .btn-move-member,
+    .btn-delete-member { opacity: 1; }
+  }
 </style>
 </head>
 <body>
@@ -702,6 +814,9 @@
   <div style="color:#8b949e;font-size:14px;">Firebase에서 데이터를 불러오는 중...</div>
 </div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+<!-- Sidebar backdrop (mobile) -->
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
 
 <div class="app">
   <!-- ===== SIDEBAR ===== -->
@@ -738,8 +853,9 @@
   <!-- ===== MAIN ===== -->
   <div class="main">
     <div class="main-header">
-      <h2 id="main-title">
-        <span id="main-title-text">팀원을 선택하세요</span>
+      <button class="hamburger-btn" onclick="toggleSidebar()" title="메뉴">☰</button>
+      <h2 id="main-title" style="flex:1;min-width:0;">
+        <span id="main-title-text" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">팀원을 선택하세요</span>
       </h2>
       <div class="header-actions" id="header-actions"></div>
     </div>
@@ -1164,11 +1280,32 @@ function renderSidebar() {
   }
 }
 
+// ===== MOBILE SIDEBAR TOGGLE =====
+function isMobile() { return window.innerWidth <= 768; }
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  const isOpen = sidebar.classList.contains('sidebar-open');
+  if (isOpen) { closeSidebar(); } else { openSidebar(); }
+}
+
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('sidebar-open');
+  document.getElementById('sidebar-backdrop').classList.add('open');
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('sidebar-open');
+  document.getElementById('sidebar-backdrop').classList.remove('open');
+}
+
 function selectMember(id) {
   selectedMemberId = id;
   currentView = 'member';
   document.getElementById('nav-idea-board').classList.remove('active');
   document.getElementById('nav-library').classList.remove('active');
+  if (isMobile()) closeSidebar();
   renderSidebar();
   renderMemberView();
 }
@@ -1312,6 +1449,7 @@ function renderMemberView() {
 
 // ===== IDEA BOARD =====
 function showIdeaBoard() {
+  if (isMobile()) closeSidebar();
   currentView = 'ideas';
   selectedMemberId = null;
   renderSidebar();
@@ -1377,6 +1515,7 @@ const LIB_TYPE_META = {
 let libFilter = 'all';
 
 function showLibrary() {
+  if (isMobile()) closeSidebar();
   currentView = 'library';
   selectedMemberId = null;
   renderSidebar();
