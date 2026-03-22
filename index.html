@@ -693,6 +693,11 @@
     gap: 4px;
   }
 
+  /* ===== FILE DROP ZONE ===== */
+  #lib-file-drop:hover { border-color: var(--accent-blue) !important; }
+  #lib-file-preview { display: none; }
+  #lib-file-preview.show { display: flex !important; }
+
   /* ===== HAMBURGER BUTTON ===== */
 
   .hamburger-btn {
@@ -1040,8 +1045,30 @@
         <input type="text" id="input-lib-url" placeholder="https://...">
       </div>
       <div class="form-group" id="lib-filename-group" style="display:none;">
-        <label>파일명</label>
-        <input type="text" id="input-lib-filename" placeholder="예: 2026_시장전망.pdf">
+        <label>파일 첨부</label>
+        <label id="lib-file-drop" style="
+          display:flex;flex-direction:column;align-items:center;justify-content:center;
+          border:2px dashed var(--border);border-radius:8px;padding:20px 12px;
+          cursor:pointer;transition:border-color 0.15s;gap:6px;
+        " ondragover="event.preventDefault();this.style.borderColor='var(--accent-blue)'"
+           ondragleave="this.style.borderColor='var(--border)'"
+           ondrop="handleLibFileDrop(event)">
+          <span style="font-size:28px;">📂</span>
+          <span style="font-size:13px;color:var(--text-secondary);">클릭하거나 파일을 드래그하세요</span>
+          <span style="font-size:11px;color:var(--text-muted);">PDF · PPT · Word · 기타 (권장 5MB 이하)</span>
+          <input type="file" id="input-lib-file" style="display:none;" onchange="handleLibFileSelect(this)">
+        </label>
+        <div id="lib-file-preview" style="display:none;margin-top:8px;padding:10px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;display:none;align-items:center;gap:10px;">
+          <span id="lib-file-preview-icon" style="font-size:22px;"></span>
+          <div style="flex:1;min-width:0;">
+            <div id="lib-file-preview-name" style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+            <div id="lib-file-preview-size" style="font-size:11px;color:var(--text-muted);"></div>
+          </div>
+          <button onclick="clearLibFile()" style="border:none;background:none;color:var(--accent-red);font-size:16px;cursor:pointer;">×</button>
+        </div>
+        <div id="lib-file-warn" style="display:none;margin-top:6px;font-size:11px;color:var(--accent-yellow);">
+          ⚠️ 파일이 5MB를 초과합니다. 저장이 느려질 수 있습니다.
+        </div>
       </div>
       <div class="form-group">
         <label>설명 (선택)</label>
@@ -1176,6 +1203,9 @@ let targetWeekId = null;
 const expandedLibWeeks = new Set();
 let targetLibWeekId = null;
 
+// ===== IDEA BOARD WEEK STATE =====
+const expandedIdeaWeeks = new Set();
+
 function getWeek(m, weekId) {
   return (m.weeks || []).find(w => w.id === weekId);
 }
@@ -1271,7 +1301,9 @@ function renderSidebar() {
   });
 
   const totalIdeas = appData.members.reduce((s, m) =>
-    s + (m.weeks || []).reduce((ws, w) => ws + (w.holdings || []).filter(h => h.idea).length, 0), 0);
+    s + (m.weeks || []).reduce((ws, w) =>
+      ws + (w.holdings || []).filter(h => h.idea).length
+         + (w.topPicks || []).filter(p => p.reason).length, 0), 0);
   document.getElementById('idea-count').textContent = totalIdeas;
 
   const libWeeks = appData.library || [];
@@ -1468,50 +1500,115 @@ function showIdeaBoard() {
   document.getElementById('nav-library').classList.remove('active');
   document.getElementById('main-title-text').textContent = '💡 전체 투자 아이디어';
   document.getElementById('header-actions').innerHTML = '';
+  renderIdeaBoard();
+}
 
+function renderIdeaBoard() {
   const content = document.getElementById('main-content');
+  const statusColors = {
+    '신규편입': 'var(--accent-green)', '비중확대': 'var(--accent-red)',
+    '유지': 'var(--text-secondary)', '비중축소': 'var(--accent-blue)',
+    '편출': 'var(--accent-orange, #f59e0b)'
+  };
 
-  // Gather all holdings with ideas
-  let allIdeas = [];
+  // 주차별로 아이디어 그룹화 (탑픽 + 포트폴리오 아이디어 모두 수집)
+  const weekMap = new Map(); // startDate → { label, startDate, ideas[] }
   appData.members.forEach(m => {
     (m.weeks || []).forEach(w => {
+      const key = w.startDate;
+      if (!weekMap.has(key)) {
+        weekMap.set(key, { label: formatWeekLabel(w.startDate), startDate: w.startDate, ideas: [] });
+      }
+      const bucket = weekMap.get(key);
+      // ① 탑픽 선정 이유
+      (w.topPicks || []).forEach(p => {
+        if (p.reason) {
+          bucket.ideas.push({
+            name: p.name, reason: p.reason,
+            source: 'toppick',
+            memberName: m.name, memberColor: m.color
+          });
+        }
+      });
+      // ② 포트폴리오 아이디어
       (w.holdings || []).forEach(h => {
         if (h.idea) {
-          allIdeas.push({ name: h.name, status: h.status, idea: h.idea, memberName: m.name, memberColor: m.color });
+          bucket.ideas.push({
+            name: h.name, status: h.status, reason: h.idea,
+            source: 'holding',
+            memberName: m.name, memberColor: m.color
+          });
         }
       });
     });
   });
 
-  const statusColors = {'신규편입':'var(--accent-green)','비중확대':'var(--accent-red)','유지':'var(--text-secondary)','비중축소':'var(--accent-blue)','편출':'var(--accent-orange, #f59e0b)'};
+  const sortedWeeks = [...weekMap.values()].sort((a, b) => b.startDate.localeCompare(a.startDate));
 
-  content.innerHTML = `
-    <div class="card">
-      <div class="card-body" style="padding:0;">
-        <table class="picks-table">
-          <thead>
-            <tr>
-              <th>팀원</th>
-              <th>종목명</th>
-              <th>현황</th>
-              <th>투자 아이디어</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${allIdeas.map(item => `
-              <tr>
-                <td><span style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:50%;background:${item.memberColor};display:inline-block;"></span>${item.memberName}</span></td>
-                <td><div class="ticker">${item.name}</div></td>
-                <td><span class="opinion-tag" style="color:${statusColors[item.status] || 'var(--text-secondary)'};border-color:${statusColors[item.status] || 'var(--text-secondary)'}">${item.status}</span></td>
-                <td class="reason">${escapeHtml(item.idea)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        ${allIdeas.length === 0 ? '<div class="empty-state" style="padding:30px"><div class="icon">💡</div><p>아직 등록된 아이디어가 없습니다.<br>포트폴리오 종목에 아이디어를 추가해 보세요!</p></div>' : ''}
+  if (sortedWeeks.length === 0) {
+    content.innerHTML = `<div class="empty-state"><div class="icon">💡</div><p>아직 등록된 아이디어가 없습니다.<br>탑픽 선정 이유나 포트폴리오 아이디어를 입력해 보세요!</p></div>`;
+    return;
+  }
+
+  // 첫 번째 주차(최신) 기본 오픈
+  if (expandedIdeaWeeks.size === 0) expandedIdeaWeeks.add(sortedWeeks[0].startDate);
+
+  const weeksHtml = sortedWeeks.map((wk, wi) => {
+    const isLatest = wi === 0;
+    const isOpen = expandedIdeaWeeks.has(wk.startDate);
+    const ideas = wk.ideas;
+
+    const tableHtml = ideas.length === 0
+      ? `<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">이번 주차에는 등록된 아이디어가 없습니다.</div>`
+      : `<div class="card"><div class="card-body" style="padding:0;">
+          <table class="picks-table">
+            <thead>
+              <tr><th>팀원</th><th>종목명</th><th>구분</th><th>아이디어 / 선정 이유</th></tr>
+            </thead>
+            <tbody>
+              ${ideas.map(item => {
+                const memberCell = `<span style="display:flex;align-items:center;gap:6px;">
+                  <span style="width:10px;height:10px;border-radius:50%;background:${item.memberColor};flex-shrink:0;display:inline-block;"></span>
+                  ${item.memberName}
+                </span>`;
+                const tagCell = item.source === 'toppick'
+                  ? `<span class="opinion-tag" style="color:var(--accent-yellow);border-color:var(--accent-yellow);">⭐ 탑픽</span>`
+                  : `<span class="opinion-tag" style="color:${statusColors[item.status]||'var(--text-secondary)'};border-color:${statusColors[item.status]||'var(--text-secondary)'}">${item.status}</span>`;
+                return `<tr>
+                  <td>${memberCell}</td>
+                  <td><div class="ticker">${item.name}</div></td>
+                  <td>${tagCell}</td>
+                  <td class="reason">${escapeHtml(item.reason)}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div></div>`;
+
+    return `
+      <div class="week-section">
+        <div class="week-header" onclick="toggleIdeaWeek('${wk.startDate}')">
+          <div class="week-label">
+            ${isLatest ? '<span class="badge-current">현재</span>' : ''}
+            <span class="week-title">${wk.label}</span>
+            <span class="week-date-sub">(${ideas.length}개 아이디어)</span>
+          </div>
+          <button class="week-toggle ${isOpen ? 'open' : ''}" onclick="event.stopPropagation();toggleIdeaWeek('${wk.startDate}')">▼</button>
+        </div>
+        <div class="week-body ${isOpen ? 'open' : ''}" style="padding:14px;">
+          ${tableHtml}
+        </div>
       </div>
-    </div>
-  `;
+    `;
+  }).join('');
+
+  content.innerHTML = weeksHtml;
+}
+
+function toggleIdeaWeek(startDate) {
+  if (expandedIdeaWeeks.has(startDate)) expandedIdeaWeeks.delete(startDate);
+  else expandedIdeaWeeks.add(startDate);
+  renderIdeaBoard();
 }
 
 // ===== LIBRARY =====
@@ -1583,9 +1680,20 @@ function renderLibrary() {
       <div class="lib-grid">
         ${items.map(item => {
           const meta = LIB_TYPE_META[item.type] || LIB_TYPE_META.file;
-          const titleHtml = item.type === 'link' && item.url
-            ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a>`
-            : escapeHtml(item.title);
+          // 제목/다운로드 링크
+          let titleHtml;
+          if (item.type === 'link' && item.url) {
+            titleHtml = `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a>`;
+          } else {
+            titleHtml = escapeHtml(item.title);
+          }
+          // 파일 다운로드 버튼
+          const fileSizeTxt = item.fileSize ? ` (${(item.fileSize/1024/1024).toFixed(1)}MB)` : '';
+          const downloadBtn = (item.fileData && item.filename) ? `
+            <button onclick="downloadLibFile('${lw.id}','${item.id}')"
+              style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent-blue);font-size:11px;cursor:pointer;margin-top:6px;font-weight:600;">
+              ⬇ 다운로드${fileSizeTxt}
+            </button>` : '';
           return `
             <div class="lib-card">
               <div class="lib-card-top">
@@ -1593,8 +1701,9 @@ function renderLibrary() {
                 <div style="flex:1;min-width:0;">
                   <div class="lib-card-title">${titleHtml}</div>
                   ${item.filename ? `<div class="lib-card-desc" style="margin-top:2px;font-size:11px;opacity:0.7;">${escapeHtml(item.filename)}</div>` : ''}
+                  ${downloadBtn}
                 </div>
-                <button onclick="removeLibraryItem('${lw.id}','${item.id}')" style="color:var(--accent-red);border:none;background:none;font-size:16px;cursor:pointer;flex-shrink:0;line-height:1;">×</button>
+                <button onclick="removeLibraryItem('${lw.id}','${item.id}')" style="color:var(--accent-red);border:none;background:none;font-size:16px;cursor:pointer;flex-shrink:0;line-height:1;align-self:flex-start;">×</button>
               </div>
               ${item.desc ? `<div class="lib-card-desc">${escapeHtml(item.desc)}</div>` : ''}
               <div class="lib-card-meta">
@@ -1680,6 +1789,75 @@ function toggleLibFields() {
   const type = document.getElementById('input-lib-type').value;
   document.getElementById('lib-url-group').style.display = type === 'link' ? '' : 'none';
   document.getElementById('lib-filename-group').style.display = type !== 'link' ? '' : 'none';
+  // 유형 변경 시 파일 초기화
+  if (type === 'link') clearLibFile();
+  // 파일 accept 속성 업데이트
+  const accepts = { pdf: '.pdf', pptx: '.ppt,.pptx', docx: '.doc,.docx', file: '*' };
+  const fi = document.getElementById('input-lib-file');
+  if (fi) fi.accept = accepts[type] || '*';
+}
+
+let _libFileData = null; // { base64, filename, size, mime }
+
+function handleLibFileSelect(input) {
+  if (input.files && input.files[0]) _processLibFile(input.files[0]);
+}
+
+function handleLibFileDrop(e) {
+  e.preventDefault();
+  document.getElementById('lib-file-drop').style.borderColor = 'var(--border)';
+  const file = e.dataTransfer.files[0];
+  if (file) _processLibFile(file);
+}
+
+function _processLibFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    _libFileData = { base64: e.target.result, filename: file.name, size: file.size, mime: file.type };
+    // 미리보기
+    const typeMap = { 'application/pdf': '📄', 'application/vnd.ms-powerpoint': '📊',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': '📊',
+      'application/msword': '📝', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '📝' };
+    document.getElementById('lib-file-preview-icon').textContent = typeMap[file.type] || '📁';
+    document.getElementById('lib-file-preview-name').textContent = file.name;
+    document.getElementById('lib-file-preview-size').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+    document.getElementById('lib-file-preview').classList.add('show');
+    document.getElementById('lib-file-warn').style.display = file.size > 5 * 1024 * 1024 ? '' : 'none';
+    // 제목이 비어 있으면 파일명으로 자동 채우기
+    const titleInput = document.getElementById('input-lib-title');
+    if (!titleInput.value) titleInput.value = file.name.replace(/\.[^/.]+$/, '');
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearLibFile() {
+  _libFileData = null;
+  const fi = document.getElementById('input-lib-file');
+  if (fi) fi.value = '';
+  const preview = document.getElementById('lib-file-preview');
+  if (preview) preview.classList.remove('show');
+  const warn = document.getElementById('lib-file-warn');
+  if (warn) warn.style.display = 'none';
+}
+
+// 파일 드롭존 클릭 시 input 트리거
+document.addEventListener('click', function(e) {
+  if (e.target.closest('#lib-file-drop') && !e.target.closest('#lib-file-preview') && !e.target.closest('button')) {
+    document.getElementById('input-lib-file').click();
+  }
+});
+
+function downloadLibFile(weekId, itemId) {
+  const lw = (appData.library || []).find(w => w.id === weekId);
+  if (!lw) return;
+  const item = (lw.items || []).find(it => it.id === itemId);
+  if (!item || !item.fileData) return;
+  const a = document.createElement('a');
+  a.href = item.fileData;
+  a.download = item.filename || 'download';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function openAddLibraryModal(weekId) {
@@ -1693,31 +1871,34 @@ function openAddLibraryModal(weekId) {
 
 function addLibraryItem() {
   const title = document.getElementById('input-lib-title').value.trim();
-  if (!title) return;
+  if (!title) { alert('제목을 입력해주세요.'); return; }
   const type = document.getElementById('input-lib-type').value;
+  // 파일 유형인데 파일이 없으면 경고
+  if (type !== 'link' && !_libFileData) { alert('파일을 첨부해주세요.'); return; }
   if (!appData.library) appData.library = [];
   // 대상 주차 찾기
   let lw = appData.library.find(w => w.id === targetLibWeekId);
-  if (!lw) {
-    // 주차가 없으면 자동으로 첫 번째 주차에 추가
-    lw = appData.library[0];
-  }
+  if (!lw) lw = appData.library[0];
   if (!lw) return;
   if (!lw.items) lw.items = [];
-  lw.items.unshift({
+  const item = {
     id: 'lib_' + Date.now(),
     type,
     title,
     url: type === 'link' ? document.getElementById('input-lib-url').value.trim() : '',
-    filename: type !== 'link' ? document.getElementById('input-lib-filename').value.trim() : '',
+    filename: _libFileData ? _libFileData.filename : '',
+    fileSize: _libFileData ? _libFileData.size : 0,
+    fileData: _libFileData ? _libFileData.base64 : '',
     desc: document.getElementById('input-lib-desc').value.trim(),
     author: document.getElementById('input-lib-author').value,
     date: todayStr(),
     createdAt: Date.now()
-  });
+  };
+  lw.items.unshift(item);
   closeAllModals();
-  ['input-lib-title','input-lib-url','input-lib-filename','input-lib-desc'].forEach(id => document.getElementById(id).value = '');
+  ['input-lib-title','input-lib-url','input-lib-desc'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('input-lib-type').value = 'link';
+  clearLibFile();
   toggleLibFields();
   saveData();
   renderSidebar();
@@ -2023,9 +2204,10 @@ db.ref('dashboard').on('value', (snapshot) => {
   renderSidebar();
   if (currentView === 'library') {
     showLibrary();
+  } else if (currentView === 'ideas') {
+    showIdeaBoard();
   } else if (selectedMemberId && appData.members.find(m => m.id === selectedMemberId)) {
-    if (currentView === 'ideas') showIdeaBoard();
-    else renderMemberView();
+    renderMemberView();
   } else if (appData.members.length > 0) {
     selectMember(appData.members[0].id);
   }
