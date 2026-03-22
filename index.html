@@ -1687,12 +1687,13 @@ function renderLibrary() {
           } else {
             titleHtml = escapeHtml(item.title);
           }
-          // 파일 다운로드 버튼
+          // 파일 열기/다운로드 버튼
           const fileSizeTxt = item.fileSize ? ` (${(item.fileSize/1024/1024).toFixed(1)}MB)` : '';
+          const isViewable = item.type === 'pdf';
           const downloadBtn = (item.fileData && item.filename) ? `
-            <button onclick="downloadLibFile('${lw.id}','${item.id}')"
+            <button onclick="openLibFile('${lw.id}','${item.id}')"
               style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--accent-blue);font-size:11px;cursor:pointer;margin-top:6px;font-weight:600;">
-              ⬇ 다운로드${fileSizeTxt}
+              ${isViewable ? '🔍 열기' : '⬇ 다운로드'}${fileSizeTxt}
             </button>` : '';
           return `
             <div class="lib-card">
@@ -1840,24 +1841,22 @@ function clearLibFile() {
   if (warn) warn.style.display = 'none';
 }
 
-// 파일 드롭존 클릭 시 input 트리거
-document.addEventListener('click', function(e) {
-  if (e.target.closest('#lib-file-drop') && !e.target.closest('#lib-file-preview') && !e.target.closest('button')) {
-    document.getElementById('input-lib-file').click();
-  }
-});
-
-function downloadLibFile(weekId, itemId) {
+function openLibFile(weekId, itemId) {
   const lw = (appData.library || []).find(w => w.id === weekId);
   if (!lw) return;
   const item = (lw.items || []).find(it => it.id === itemId);
   if (!item || !item.fileData) return;
-  const a = document.createElement('a');
-  a.href = item.fileData;
-  a.download = item.filename || 'download';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  // PDF는 새 탭에서 바로 열기, 나머지는 다운로드
+  if (item.type === 'pdf') {
+    window.open(item.fileData, '_blank');
+  } else {
+    const a = document.createElement('a');
+    a.href = item.fileData;
+    a.download = item.filename || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 }
 
 function openAddLibraryModal(weekId) {
