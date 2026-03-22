@@ -1086,9 +1086,14 @@ let appData = null; // Firebase에서 로드됨
 
 function getSampleData() { return {
   library: [
-    { id: 'lib1', type: 'link', title: '2026 글로벌 증시 전망 - 골드만삭스', url: 'https://example.com/gs-outlook-2026', filename: '', desc: '주요 자산군별 수익률 전망', author: '빈스', date: '2026-03-10' },
-    { id: 'lib2', type: 'pdf', title: '반도체 업황 분석 리포트', url: '', filename: '반도체_업황분석_2026Q1.pdf', desc: '', author: '빈스', date: '2026-03-15' },
-    { id: 'lib3', type: 'pptx', title: '팀 투자 전략 발표자료', url: '', filename: '투자전략_2026Q1.pptx', desc: '분기 포트폴리오 리뷰', author: '민수', date: '2026-03-18' },
+    {
+      id: 'libweek_1', startDate: '2026-03-17',
+      items: [
+        { id: 'lib1', type: 'link', title: '2026 글로벌 증시 전망 - 골드만삭스', url: 'https://example.com/gs-outlook-2026', filename: '', desc: '주요 자산군별 수익률 전망', author: '빈스', date: '2026-03-10' },
+        { id: 'lib2', type: 'pdf', title: '반도체 업황 분석 리포트', url: '', filename: '반도체_업황분석_2026Q1.pdf', desc: '', author: '빈스', date: '2026-03-15' },
+        { id: 'lib3', type: 'pptx', title: '팀 투자 전략 발표자료', url: '', filename: '투자전략_2026Q1.pptx', desc: '분기 포트폴리오 리뷰', author: '민수', date: '2026-03-18' },
+      ]
+    }
   ],
   members: [
     {
@@ -1166,6 +1171,10 @@ function saveData() {
 // ===== WEEK STATE =====
 const expandedWeeks = new Set();
 let targetWeekId = null;
+
+// ===== LIBRARY WEEK STATE =====
+const expandedLibWeeks = new Set();
+let targetLibWeekId = null;
 
 function getWeek(m, weekId) {
   return (m.weeks || []).find(w => w.id === weekId);
@@ -1265,9 +1274,9 @@ function renderSidebar() {
     s + (m.weeks || []).reduce((ws, w) => ws + (w.holdings || []).filter(h => h.idea).length, 0), 0);
   document.getElementById('idea-count').textContent = totalIdeas;
 
-  const libItems = appData.library || [];
-  const libCount = libItems.length;
-  const libHasNew = libItems.some(r => isNew(r.createdAt));
+  const libWeeks = appData.library || [];
+  const libCount = libWeeks.reduce((s, lw) => s + (lw.items || []).length, 0);
+  const libHasNew = libWeeks.some(lw => isNew(lw.createdAt) || (lw.items || []).some(it => isNew(it.createdAt)));
   document.getElementById('library-count').textContent = libCount;
 
   // NEW 점 표시 (nav 아이템 옆)
@@ -1520,40 +1529,63 @@ function showLibrary() {
   if (isMobile()) closeSidebar();
   currentView = 'library';
   selectedMemberId = null;
+  // 최신 주차(첫 번째)를 기본으로 펼쳐둠
+  if (expandedLibWeeks.size === 0 && (appData.library || []).length > 0) {
+    expandedLibWeeks.add(appData.library[0].id);
+  }
   renderSidebar();
   document.getElementById('nav-idea-board').classList.remove('active');
   document.getElementById('nav-library').classList.add('active');
   document.getElementById('main-title-text').textContent = '📚 자료실';
   document.getElementById('header-actions').innerHTML = `
-    <button class="btn btn-primary btn-sm" onclick="openAddLibraryModal()">＋ 자료 추가</button>
+    <button class="btn btn-primary btn-sm" onclick="addLibraryWeek()">＋ 새 주차 추가</button>
   `;
   renderLibrary();
 }
 
 function renderLibrary() {
   const content = document.getElementById('main-content');
-  const lib = (appData.library || []);
-  const filtered = libFilter === 'all' ? lib : lib.filter(r => r.type === libFilter);
+  const libWeeks = (appData.library || []);
+  const totalItems = libWeeks.reduce((s, lw) => s + (lw.items || []).length, 0);
 
-  content.innerHTML = `
+  // 필터 적용된 주차별 items 수 계산
+  function filteredItems(lw) {
+    const items = lw.items || [];
+    return libFilter === 'all' ? items : items.filter(r => r.type === libFilter);
+  }
+
+  const filterBar = `
     <div class="lib-filter-bar">
       ${['all','link','pdf','pptx','docx','file'].map(t => `
         <button class="filter-chip ${libFilter === t ? 'active' : ''}" onclick="setLibFilter('${t}')">
           ${t === 'all' ? '전체' : (LIB_TYPE_META[t]?.icon + ' ' + LIB_TYPE_META[t]?.label)}
-          ${t === 'all' ? `<span style="margin-left:4px;opacity:0.7;">${lib.length}</span>` : ''}
+          ${t === 'all' ? `<span style="margin-left:4px;opacity:0.7;">${totalItems}</span>` : ''}
         </button>
       `).join('')}
     </div>
-    ${filtered.length === 0 ? `
-      <div class="empty-state"><div class="icon">📚</div><p>등록된 자료가 없습니다.<br>"자료 추가" 버튼으로 첫 번째 자료를 올려보세요!</p></div>
+  `;
+
+  if (libWeeks.length === 0) {
+    content.innerHTML = filterBar + `
+      <div class="empty-state"><div class="icon">📚</div><p>등록된 자료가 없습니다.<br>상단 "새 주차 추가" 버튼으로 시작해보세요!</p></div>
+    `;
+    return;
+  }
+
+  const weeksHtml = libWeeks.map((lw, wi) => {
+    const isLatest = wi === 0;
+    const isOpen = expandedLibWeeks.has(lw.id);
+    const items = filteredItems(lw);
+
+    const itemsHtml = items.length === 0 ? `
+      <div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">해당 필터에 맞는 자료가 없습니다.</div>
     ` : `
       <div class="lib-grid">
-        ${filtered.map((item, i) => {
+        ${items.map(item => {
           const meta = LIB_TYPE_META[item.type] || LIB_TYPE_META.file;
           const titleHtml = item.type === 'link' && item.url
             ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a>`
             : escapeHtml(item.title);
-          const realIdx = lib.indexOf(item);
           return `
             <div class="lib-card">
               <div class="lib-card-top">
@@ -1562,7 +1594,7 @@ function renderLibrary() {
                   <div class="lib-card-title">${titleHtml}</div>
                   ${item.filename ? `<div class="lib-card-desc" style="margin-top:2px;font-size:11px;opacity:0.7;">${escapeHtml(item.filename)}</div>` : ''}
                 </div>
-                <button onclick="removeLibraryItem(${realIdx})" style="color:var(--accent-red);border:none;background:none;font-size:16px;cursor:pointer;flex-shrink:0;line-height:1;">×</button>
+                <button onclick="removeLibraryItem('${lw.id}','${item.id}')" style="color:var(--accent-red);border:none;background:none;font-size:16px;cursor:pointer;flex-shrink:0;line-height:1;">×</button>
               </div>
               ${item.desc ? `<div class="lib-card-desc">${escapeHtml(item.desc)}</div>` : ''}
               <div class="lib-card-meta">
@@ -1577,12 +1609,70 @@ function renderLibrary() {
           `;
         }).join('')}
       </div>
-    `}
-  `;
+    `;
+
+    return `
+      <div class="week-section">
+        <div class="week-header" onclick="toggleLibWeek('${lw.id}')">
+          <div class="week-label">
+            ${isLatest ? '<span class="badge-current">현재</span>' : ''}
+            ${isNew(lw.createdAt) ? '<span class="badge-new">NEW</span>' : ''}
+            <span class="week-title">${formatWeekLabel(lw.startDate)}</span>
+            <span class="week-date-sub">(${(lw.items||[]).length}개 자료)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn btn-sm" onclick="event.stopPropagation(); openAddLibraryModal('${lw.id}')">＋ 자료 추가</button>
+            <button class="btn btn-sm" style="color:var(--accent-red);" onclick="event.stopPropagation(); deleteLibraryWeek('${lw.id}')">🗑</button>
+            <button class="week-toggle ${isOpen ? 'open' : ''}" onclick="event.stopPropagation(); toggleLibWeek('${lw.id}')">▼</button>
+          </div>
+        </div>
+        <div class="week-body ${isOpen ? 'open' : ''}" style="padding:16px;">
+          ${itemsHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  content.innerHTML = filterBar + weeksHtml;
 }
 
 function setLibFilter(type) {
   libFilter = type;
+  renderLibrary();
+}
+
+function toggleLibWeek(weekId) {
+  if (expandedLibWeeks.has(weekId)) expandedLibWeeks.delete(weekId);
+  else expandedLibWeeks.add(weekId);
+  renderLibrary();
+}
+
+function addLibraryWeek() {
+  if (!appData.library) appData.library = [];
+  if (appData.library.length > 0 && !confirm('새 주차를 시작하겠습니까?\n이전 주차는 기록으로 보존됩니다.')) return;
+  const newWeek = {
+    id: 'libweek_' + Date.now(),
+    startDate: todayStr(),
+    createdAt: Date.now(),
+    items: []
+  };
+  appData.library.unshift(newWeek);
+  expandedLibWeeks.clear();
+  expandedLibWeeks.add(newWeek.id);
+  saveData();
+  renderSidebar();
+  renderLibrary();
+}
+
+function deleteLibraryWeek(weekId) {
+  const lw = (appData.library || []).find(w => w.id === weekId);
+  if (!lw) return;
+  const label = formatWeekLabel(lw.startDate);
+  if (!confirm(`"${label}" 자료실 주차를 삭제하시겠습니까?\n포함된 자료 ${(lw.items||[]).length}개가 모두 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
+  appData.library = appData.library.filter(w => w.id !== weekId);
+  expandedLibWeeks.delete(weekId);
+  saveData();
+  renderSidebar();
   renderLibrary();
 }
 
@@ -1592,7 +1682,9 @@ function toggleLibFields() {
   document.getElementById('lib-filename-group').style.display = type !== 'link' ? '' : 'none';
 }
 
-function openAddLibraryModal() {
+function openAddLibraryModal(weekId) {
+  // 대상 주차 설정
+  targetLibWeekId = weekId || ((appData.library || [])[0] || {}).id || null;
   // 작성자 드롭다운 채우기
   const sel = document.getElementById('input-lib-author');
   sel.innerHTML = appData.members.map(m => `<option value="${escapeHtml(m.name)}">${m.name}</option>`).join('');
@@ -1604,7 +1696,15 @@ function addLibraryItem() {
   if (!title) return;
   const type = document.getElementById('input-lib-type').value;
   if (!appData.library) appData.library = [];
-  appData.library.unshift({
+  // 대상 주차 찾기
+  let lw = appData.library.find(w => w.id === targetLibWeekId);
+  if (!lw) {
+    // 주차가 없으면 자동으로 첫 번째 주차에 추가
+    lw = appData.library[0];
+  }
+  if (!lw) return;
+  if (!lw.items) lw.items = [];
+  lw.items.unshift({
     id: 'lib_' + Date.now(),
     type,
     title,
@@ -1624,9 +1724,11 @@ function addLibraryItem() {
   renderLibrary();
 }
 
-function removeLibraryItem(idx) {
+function removeLibraryItem(weekId, itemId) {
   if (!confirm('이 자료를 삭제하시겠습니까?')) return;
-  appData.library.splice(idx, 1);
+  const lw = (appData.library || []).find(w => w.id === weekId);
+  if (!lw) return;
+  lw.items = (lw.items || []).filter(it => it.id !== itemId);
   saveData();
   renderSidebar();
   renderLibrary();
@@ -1874,6 +1976,19 @@ db.ref('dashboard').on('value', (snapshot) => {
     appData.members = appData.members || [];
     appData.library = appData.library || [];
     let needsMigration = false;
+
+    // 자료실 구버전(flat items) → 주차 구조 마이그레이션
+    if (appData.library.length > 0 && appData.library[0].items === undefined) {
+      appData.library = [{
+        id: 'libweek_migrated_' + Date.now(),
+        startDate: todayStr(),
+        items: appData.library.map(item => ({ ...item }))
+      }];
+      needsMigration = true;
+    }
+    // Firebase null 배열 보정 (library weeks)
+    appData.library.forEach(lw => { lw.items = lw.items || []; });
+
     appData.members.forEach(m => {
       // 구버전(flat 구조) → 신버전(weeks[]) 마이그레이션
       if (!m.weeks && (m.thought !== undefined || m.topPicks !== undefined)) {
