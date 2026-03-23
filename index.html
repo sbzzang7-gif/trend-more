@@ -2181,8 +2181,9 @@ db.ref('dashboard').on('value', (snapshot) => {
     appData.library = appData.library || [];
     let needsMigration = false;
 
-    // 자료실 구버전(flat items) → 주차 구조 마이그레이션
-    if (appData.library.length > 0 && appData.library[0].items === undefined) {
+    // 자료실 구버전(flat items, startDate 없음) → 주차 구조 마이그레이션
+    // startDate가 없는 경우에만 구버전으로 판단 (Firebase가 빈 items:[] 를 제거해도 오동작하지 않음)
+    if (appData.library.length > 0 && !appData.library[0].startDate) {
       appData.library = [{
         id: 'libweek_migrated_' + Date.now(),
         startDate: todayStr(),
